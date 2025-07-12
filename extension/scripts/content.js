@@ -189,7 +189,7 @@ async function injectPullRequestCreationUI() {
     {
       id: buttonId,
       type: 'button',
-      class: 'btn btn-primary ml-2',
+      class: 'hx_create-pr-button btn-primary BtnGroup-item btn btn-sm',
       title: 'Create pull request and attach Linear ticket',
     },
     h(

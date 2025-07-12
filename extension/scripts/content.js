@@ -232,8 +232,6 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
     // Extract PR information from the form
     const titleInput = prForm.querySelector('input[name="pull_request[title]"]');
     const descriptionTextarea = prForm.querySelector('textarea[name="pull_request[body]"]');
-    const baseRef = prForm.querySelector('input[name="pull_request[base]"]');
-    const headRef = prForm.querySelector('input[name="pull_request[head]"]');
 
     if (!titleInput || !descriptionTextarea) {
       throw new Error('Could not find PR title or description fields.');
@@ -255,7 +253,7 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
     const linearTicket = await createLinearTicket(prTitle, prDescription, prUrl);
 
     // Add Linear ticket reference to PR description
-    const ticketReference = `\n\n**Linear ticket:** ${linearTicket.identifier} - ${linearTicket.title}\n${linearTicket.url}`;
+    const ticketReference = `\n\ncloses ${linearTicket.identifier} - ${linearTicket.title}\n${linearTicket.url}`;
     descriptionTextarea.value = prDescription + ticketReference;
 
     // Submit the form
@@ -286,8 +284,32 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
  * @returns {Promise<{identifier: string, title: string, url: string} | null>}
  */
 async function createLinearTicket(title, description, prUrl) {
-  const createIssueQuery = `
-    mutation CreateIssue($title: String!, $description: String!, $teamId: String!, $assigneeId: String) {
+  // Get user preferences for default team and assignee
+  const defaults = await new Promise((resolve) => {
+    chrome.storage.local.get({ defaults: {} }, ({ defaults }) => {
+      resolve(defaults);
+    });
+  });
+
+  if (!defaults.team) {
+    throw new Error('Please configure a default team in extension options.');
+  }
+
+  // Ensure title is not empty and not too long
+  const cleanTitle = title.trim() || 'Untitled PR';
+  const truncatedTitle = cleanTitle.length > 255 ? cleanTitle.substring(0, 252) + '...' : cleanTitle;
+  
+  // Ensure description is not too long
+  const prDescription = description.trim();
+  const fullDescription = `${prDescription}\n\nGitHub PR: ${prUrl}`;
+  const truncatedDescription = fullDescription.length > 50000 ? fullDescription.substring(0, 49997) + '...' : fullDescription;
+
+  let createIssueQuery;
+  let variables;
+  
+  // Include assigneeId in the mutation
+  createIssueQuery = `
+    mutation CreateIssue($title: String!, $description: String!, $teamId: String!, $assigneeId: String!) {
       issueCreate(input: {
         title: $title
         description: $description
@@ -304,24 +326,15 @@ async function createLinearTicket(title, description, prUrl) {
       }
     }
   `;
-
-  // Get user preferences for default team and assignee
-  const defaults = await new Promise((resolve) => {
-    chrome.storage.local.get({ defaults: {} }, ({ defaults }) => {
-      resolve(defaults);
-    });
-  });
-
-  if (!defaults.team) {
-    throw new Error('Please configure a default team in extension options.');
-  }
-
-  const variables = {
-    title,
-    description: `${description}\n\nGitHub PR: ${prUrl}`,
+  
+  variables = {
+    title: truncatedTitle,
+    description: truncatedDescription,
     teamId: defaults.team,
-    assigneeId: defaults.assignee || null,
+    assigneeId: defaults.assignee,
   };
+
+  console.log('Creating Linear ticket with variables:', variables);
 
   const response = await new Promise((resolve) => {
     chrome.runtime.sendMessage(
@@ -333,6 +346,8 @@ async function createLinearTicket(title, description, prUrl) {
     );
   });
 
+  console.log('Linear API response:', response);
+
   if (response?.data?.issueCreate?.success) {
     return response.data.issueCreate.issue;
   }
@@ -340,6 +355,7 @@ async function createLinearTicket(title, description, prUrl) {
   // Check for specific error messages
   if (response?.errors?.length) {
     const errorMessage = response.errors.map(err => err.message).join(', ');
+    console.error('Linear API errors:', response.errors);
     throw new Error(`Linear API error: ${errorMessage}`);
   }
 

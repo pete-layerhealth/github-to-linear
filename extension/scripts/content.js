@@ -6,6 +6,7 @@ document.addEventListener('turbo:render', init);
 function init() {
   injectSingleIssueUI();
   injectIssueListUI();
+  injectPullRequestCreationUI();
 }
 
 /**
@@ -128,6 +129,241 @@ async function injectSingleIssueUI() {
   // Inject the link into the page.
   headerMeta.append(ButtonGroup);
   injectSidebarUI(issues);
+}
+
+/**
+ * Inject the "Create pull request & attach linear ticket" button on the pull request creation page.
+ */
+async function injectPullRequestCreationUI() {
+  // Check if we're on the pull request creation page
+  if (!isPullRequestCreationPage()) return;
+
+  /** ID for the button we'll create. */
+  const buttonId = 'github-to-linear-create-pr-with-ticket';
+  
+  // We already created our button. Let's chill.
+  if (document.getElementById(buttonId)) return;
+
+  // Check if user has configured Linear API key
+  const hasApiKey = await new Promise((resolve) => {
+    chrome.storage.local.get(['pat'], ({ pat }) => resolve(!!pat));
+  });
+  
+  if (!hasApiKey) {
+    console.log('Linear API key not configured. Skipping PR creation button injection.');
+    return;
+  }
+
+  // Find the existing "Create pull request" button
+  // Try multiple selectors to be more robust
+  let createPrButton = document.querySelector('button[type="submit"][data-disable-with="Creating pull request…"]') ||
+                       document.querySelector('button[type="submit"][value="Create pull request"]');
+  
+  // If still not found, look for buttons with "Create pull request" text
+  if (!createPrButton) {
+    const buttons = document.querySelectorAll('button[type="submit"]');
+    for (const button of buttons) {
+      if (button.textContent.includes('Create pull request')) {
+        createPrButton = button;
+        break;
+
+      }
+    }
+  }
+  
+  if (!createPrButton) {
+    console.error('Could not find Create pull request button.');
+    return;
+  }
+
+  // Get the PR form to extract information
+  const prForm = createPrButton.closest('form');
+  if (!prForm) {
+    console.error('Could not find PR form.');
+    return;
+  }
+
+  // Create the new button
+  const createPrWithTicketButton = h(
+    'button',
+    {
+      id: buttonId,
+      type: 'button',
+      class: 'hx_create-pr-button btn-primary BtnGroup-item btn btn-sm',
+      title: 'Create pull request and attach Linear ticket',
+    },
+    h(
+      'span',
+      { class: 'gh2l-icon-text-lockup' },
+      LinearLogo(),
+      'Create PR & attach Linear ticket'
+    )
+  );
+
+  // Add click handler
+  createPrWithTicketButton.addEventListener('click', async (e) => {
+    e.preventDefault();
+    await handleCreatePrWithTicket(prForm, createPrButton);
+  });
+
+  // Insert the button before the original "Create pull request" button
+  createPrButton.parentNode.insertBefore(createPrWithTicketButton, createPrButton);
+}
+
+/**
+ * Check if we're on the pull request creation page.
+ */
+function isPullRequestCreationPage() {
+  return /\/compare\//.test(location.pathname);
+}
+
+/**
+ * Handle the creation of a pull request with an attached Linear ticket.
+ * @param {HTMLFormElement} prForm The PR form element
+ * @param {HTMLButtonElement} originalButton The original "Create pull request" button
+ */
+async function handleCreatePrWithTicket(prForm, originalButton) {
+  try {
+    // Disable the button during processing
+    const button = document.getElementById('github-to-linear-create-pr-with-ticket');
+    button.disabled = true;
+    button.textContent = 'Creating...';
+
+    // Extract PR information from the form
+    const titleInput = prForm.querySelector('input[name="pull_request[title]"]');
+    const descriptionTextarea = prForm.querySelector('textarea[name="pull_request[body]"]');
+
+    if (!titleInput || !descriptionTextarea) {
+      throw new Error('Could not find PR title or description fields.');
+    }
+
+    const prTitle = titleInput.value;
+    const prDescription = descriptionTextarea.value;
+    
+    // Get repo information from URL
+    const repoMatch = location.pathname.match(/^\/([^\/]+)\/([^\/]+)\//);
+    if (!repoMatch) {
+      throw new Error('Could not parse repository information from URL.');
+    }
+    
+    const [, owner, repo] = repoMatch;
+    const prUrl = `https://github.com/${owner}/${repo}/pull/`;
+
+    // Create Linear ticket
+    const linearTicket = await createLinearTicket(prTitle, prDescription, prUrl);
+
+    // Add Linear ticket reference to PR description
+    const ticketReference = `\n\ncloses ${linearTicket.identifier} - ${linearTicket.title}\n${linearTicket.url}`;
+    descriptionTextarea.value = prDescription + ticketReference;
+
+    // Submit the form
+    originalButton.click();
+
+  } catch (error) {
+    console.error('Error creating PR with Linear ticket:', error);
+    alert('Failed to create PR with Linear ticket: ' + error.message);
+    
+    // Re-enable the button
+    const button = document.getElementById('github-to-linear-create-pr-with-ticket');
+    button.disabled = false;
+    button.innerHTML = '';
+    button.appendChild(h(
+      'span',
+      { class: 'gh2l-icon-text-lockup' },
+      LinearLogo(),
+      'Create PR & attach Linear ticket'
+    ));
+  }
+}
+
+/**
+ * Create a Linear ticket via the API.
+ * @param {string} title The title for the Linear ticket
+ * @param {string} description The description for the Linear ticket
+ * @param {string} prUrl The URL that will be added to the Linear ticket
+ * @returns {Promise<{identifier: string, title: string, url: string} | null>}
+ */
+async function createLinearTicket(title, description, prUrl) {
+  // Get user preferences for default team and assignee
+  const defaults = await new Promise((resolve) => {
+    chrome.storage.local.get({ defaults: {} }, ({ defaults }) => {
+      resolve(defaults);
+    });
+  });
+
+  if (!defaults.team) {
+    throw new Error('Please configure a default team in extension options.');
+  }
+
+  // Ensure title is not empty and not too long
+  const cleanTitle = title.trim() || 'Untitled PR';
+  const truncatedTitle = cleanTitle.length > 255 ? cleanTitle.substring(0, 252) + '...' : cleanTitle;
+  
+  // Ensure description is not too long
+  const prDescription = description.trim();
+  const fullDescription = `${prDescription}\n\nGitHub PR: ${prUrl}`;
+  const truncatedDescription = fullDescription.length > 50000 ? fullDescription.substring(0, 49997) + '...' : fullDescription;
+
+  let createIssueQuery;
+  let variables;
+  
+  // Include assigneeId in the mutation
+  createIssueQuery = `
+    mutation CreateIssue($title: String!, $description: String!, $teamId: String!, $assigneeId: String!) {
+      issueCreate(input: {
+        title: $title
+        description: $description
+        teamId: $teamId
+        assigneeId: $assigneeId
+      }) {
+        success
+        issue {
+          id
+          identifier
+          title
+          url
+        }
+      }
+    }
+  `;
+  
+  variables = {
+    title: truncatedTitle,
+    description: truncatedDescription,
+    teamId: defaults.team,
+    assigneeId: defaults.assignee,
+  };
+
+  console.log('Creating Linear ticket with variables:', variables);
+
+  const response = await new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      {
+        linearQuery: createIssueQuery,
+        variables,
+      },
+      (response) => resolve(response)
+    );
+  });
+
+  console.log('Linear API response:', response);
+
+  if (response?.data?.issueCreate?.success) {
+    return response.data.issueCreate.issue;
+  }
+
+  // Check for specific error messages
+  if (response?.errors?.length) {
+    const errorMessage = response.errors.map(err => err.message).join(', ');
+    console.error('Linear API errors:', response.errors);
+    throw new Error(`Linear API error: ${errorMessage}`);
+  }
+
+  if (response?.data?.issueCreate?.success === false) {
+    throw new Error('Failed to create Linear issue - check your team permissions');
+  }
+
+  throw new Error('Unknown error occurred while creating Linear issue');
 }
 
 /**

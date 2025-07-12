@@ -69,13 +69,13 @@ async function populatePreferencesForm() {
   if (!data) return;
   const { teams, users } = data;
 
-  const assigneesMenu = Dropdown('Default Assignee', 'assignee', [
-    '',
-    ...users.nodes.map((u) => u.displayName),
+  const assigneesMenu = DropdownWithIds('Default Assignee', 'assignee', [
+    { id: '', displayName: '' },
+    ...users.nodes.map((u) => ({ id: u.id, displayName: u.displayName })),
   ]);
-  const teamsMenu = Dropdown('Default Team', 'team', [
-    '',
-    ...teams.nodes.map((t) => t.key),
+  const teamsMenu = DropdownWithIds('Default Team', 'team', [
+    { id: '', displayName: '' },
+    ...teams.nodes.map((t) => ({ id: t.id, displayName: `${t.name} (${t.key})` })),
   ]);
 
   wipePreferencesForm();
@@ -104,6 +104,32 @@ function Dropdown(labelText, id, options) {
   options.forEach((opt) => {
     const option = document.createElement('option');
     option.textContent = opt;
+    select.append(option);
+  });
+  label.append(select);
+  p.append(label);
+  return p;
+}
+
+/**
+ * Create a `<select>` form control with ID/display name mapping.
+ * @param {string} labelText Human-readable label for this form field.
+ * @param {string} id `id` used to grab the form element in scripting.
+ * @param {{ id: string, displayName: string }[]} options Array of objects with id and displayName.
+ * @returns {HTMLParagraphElement}
+ */
+function DropdownWithIds(labelText, id, options) {
+  const p = document.createElement('p');
+  const label = document.createElement('label');
+  label.classList.add('dropdown');
+  label.textContent = labelText;
+  const select = document.createElement('select');
+  select.id = id;
+  select.name = id;
+  options.forEach((opt) => {
+    const option = document.createElement('option');
+    option.value = opt.id;
+    option.textContent = opt.displayName;
     select.append(option);
   });
   label.append(select);
@@ -163,12 +189,12 @@ async function getCurrentUser() {
 
 /**
  * Get information about the teams and users available in this workspace.
- * @returns {Promise<null | { teams: { nodes: { key: string }[] }; users: { nodes: { displayName: string }[] } }>}
+ * @returns {Promise<null | { teams: { nodes: { id: string, key: string, name: string }[] }; users: { nodes: { id: string, displayName: string }[] } }>}
  */
 async function getWorkspaceInfo() {
   const workspace = await queryLinearApi(`{
-  teams { nodes { key } }
-  users { nodes { displayName } }
+  teams { nodes { id key name } }
+  users { nodes { id displayName } }
 }`);
   return workspace?.data || null;
 }

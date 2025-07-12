@@ -72,3 +72,13 @@
   border-radius: 100%;
   margin-right: 0.3em;
 }
+
+/* Pull request creation button. */
+#github-to-linear-create-pr-with-ticket {
+  flex-shrink: 0;
+}
+
+#github-to-linear-create-pr-with-ticket:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

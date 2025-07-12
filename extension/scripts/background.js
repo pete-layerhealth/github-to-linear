@@ -14,23 +14,37 @@ const queryCache = new Map();
 /**
  * Post a GraphQL query to the Linear API and get the parsed data back.
  * @param {string} query GraphQL query
+ * @param {Object} [variables] GraphQL variables
  * @returns {Promise<any>}
  */
-async function queryLinearApi(query) {
+async function queryLinearApi(query, variables) {
   const apiKey = await loadLinearApiKey();
   if (!apiKey) return null;
-  const cached = queryCache.get(query);
+  
+  // Create cache key that includes variables for mutations
+  const cacheKey = variables ? `${query}_${JSON.stringify(variables)}` : query;
+  
+  // Don't cache mutations (they typically start with 'mutation')
+  const isMutation = query.trim().toLowerCase().startsWith('mutation');
+  const cached = !isMutation ? queryCache.get(cacheKey) : null;
   if (cached && Date.now() - cached.t < 30_000) return cached.data;
+  
+  const requestBody = variables ? { query, variables } : { query };
   const response = await fetch('https://api.linear.app/graphql', {
     method: 'POST',
     headers: {
       Authorization: apiKey,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(requestBody),
   });
   const data = await response.json();
-  queryCache.set(query, { data, t: Date.now() });
+  
+  // Only cache non-mutations
+  if (!isMutation) {
+    queryCache.set(cacheKey, { data, t: Date.now() });
+  }
+  
   return data;
 }
 
@@ -40,7 +54,7 @@ async function queryLinearApi(query) {
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   let query = Promise.resolve(null);
   if (request && typeof request === 'object' && 'linearQuery' in request) {
-    query = queryLinearApi(request.linearQuery);
+    query = queryLinearApi(request.linearQuery, request.variables);
   }
   query
     .then((json) => sendResponse(json || null))

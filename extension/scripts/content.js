@@ -172,7 +172,7 @@ async function injectPullRequestCreationUI() {
   }
   
   if (!createPrButton) {
-    console.error('Could not find Create pull request button.');
+    console.debug('Could not find Create pull request button.');
     return;
   }
 
@@ -189,14 +189,15 @@ async function injectPullRequestCreationUI() {
     {
       id: buttonId,
       type: 'button',
-      class: 'hx_create-pr-button btn-primary BtnGroup-item btn btn-sm',
+      class: 'hx_create-pr-button btn-primary BtnGroup-item btn btn-sm mx-2',
+      style: 'height: 32px; border-top-right-radius: 6px; border-bottom-right-radius: 6px;',
       title: 'Create pull request and attach Linear ticket',
     },
     h(
       'span',
       { class: 'gh2l-icon-text-lockup' },
       LinearLogo(),
-      'Create PR & attach Linear ticket'
+      'Create PR & Linear ticket'
     )
   );
 
@@ -208,6 +209,10 @@ async function injectPullRequestCreationUI() {
 
   // Insert the button before the original "Create pull request" button
   createPrButton.parentNode.insertBefore(createPrWithTicketButton, createPrButton);
+
+  // Clean up the "Create pull request" button
+  createPrButton.style.borderTopLeftRadius = '6px';
+  createPrButton.style.borderBottomLeftRadius = '6px';
 }
 
 /**
@@ -271,7 +276,7 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
       'span',
       { class: 'gh2l-icon-text-lockup' },
       LinearLogo(),
-      'Create PR & attach Linear ticket'
+      'Create PR & Linear ticket'
     ));
   }
 }

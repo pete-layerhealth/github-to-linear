@@ -197,7 +197,7 @@ async function injectPullRequestCreationUI() {
       'span',
       { class: 'gh2l-icon-text-lockup' },
       LinearLogo(),
-      'Create PR & Linear ticket'
+      'Create PR & ticket'
     )
   );
 
@@ -276,7 +276,7 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
       'span',
       { class: 'gh2l-icon-text-lockup' },
       LinearLogo(),
-      'Create PR & Linear ticket'
+      'Create PR & ticket'
     ));
   }
 }

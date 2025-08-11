@@ -794,7 +794,7 @@ function PriorityIcon(priority) {
  * @returns {Promise<string>}
  */
 async function getNewIssueUrl(title, description) {
-  const createIssueUrl = new URL('https://linear.app/new');
+  const createIssueUrl = new URL('https://linear.new');
   createIssueUrl.searchParams.set('title', title);
   createIssueUrl.searchParams.set('description', description);
   // Load default parameters from user preferences.
@@ -805,10 +805,10 @@ async function getNewIssueUrl(title, description) {
   });
   // Add user preferences to URL.
   if (defaults?.team) {
-    createIssueUrl.pathname = `/team/${defaults.team}/new`;
+    createIssueUrl.searchParams.set('teamId', defaults.team);
   }
   if (defaults?.assignee) {
-    createIssueUrl.searchParams.set('assignee', defaults.assignee);
+    createIssueUrl.searchParams.set('assigneeId', defaults.assignee);
   }
   return createIssueUrl.href;
 }

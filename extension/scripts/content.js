@@ -157,7 +157,7 @@ async function injectPullRequestCreationUI() {
   // Find the existing "Create pull request" button
   // Try multiple selectors to be more robust
   let createPrButton = document.querySelector('button[type="submit"][data-disable-with="Creating pull request…"]') ||
-                       document.querySelector('button[type="submit"][value="Create pull request"]');
+                       document.querySelector('button.hx_create-pr-button');
   
   // If still not found, look for buttons with "Create pull request" text
   if (!createPrButton) {
@@ -189,7 +189,7 @@ async function injectPullRequestCreationUI() {
     {
       id: buttonId,
       type: 'button',
-      class: 'hx_create-pr-button btn-primary BtnGroup-item btn btn-sm mx-2',
+      class: 'btn-primary BtnGroup-item btn btn-sm mx-2',
       style: 'height: 32px; border-top-right-radius: 6px; border-bottom-right-radius: 6px;',
       title: 'Create pull request and attach Linear ticket',
     },

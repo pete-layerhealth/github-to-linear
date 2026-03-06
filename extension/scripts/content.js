@@ -4,7 +4,6 @@ init();
 document.addEventListener('turbo:render', init);
 
 function init() {
-  injectSingleIssueUI();
   injectIssueListUI();
   injectPullRequestCreationUI();
 }
@@ -55,80 +54,6 @@ function InlineIssueLink(linearIssue) {
     StatusIcon(linearIssue.state),
     h('span', {}, linearIssue.identifier)
   );
-}
-
-/**
- * Only runs on issue & PR pages.
- * If a matching Linear issue is found, injects a link to the issue on Linear.
- * Otherwise, injects a link to create a new Linear issue linking to this page.
- */
-async function injectSingleIssueUI() {
-  /** ID for the link we’ll create. */
-  const linkId = 'github-to-linear-create-issue-link';
-  // We already created our link. Let’s chill.
-  if (document.getElementById(linkId)) return;
-
-  // Parse the current URL to grab some information about the issue or PR.
-  const issueMetaData = parseGitHubUrl(location);
-  // If we’re not in an issue or PR we can return early.
-  if (!issueMetaData) return;
-
-  // The header section of an issue/PR we want to inject our link into.
-  const headerMeta = document.querySelector('.gh-header-meta');
-  if (!headerMeta) {
-    console.error('Could not find header meta to inject into.');
-    return;
-  }
-
-  // Grab the issue or PR title (thank you GH for using the same class for both).
-  const titleEl = document.querySelector('.js-issue-title');
-  const issueTitle = titleEl?.textContent;
-
-  const identifier = makeGitHubIdentifier(issueMetaData);
-  let title = identifier;
-  if (issueTitle) title += ' — ' + issueTitle;
-  const typeLabel = issueMetaData.type === 'pull' ? 'PR' : 'Issue';
-  const cleanedUrl = cleanUrl(issueMetaData.number)
-  const description = `GitHub ${typeLabel}: ${cleanedUrl}`;
-  const newIssueUrl = await getNewIssueUrl(title, description);
-
-  const issues = await fetchExistingIssues({ url: cleanedUrl, identifier });
-  const linearIssue = issues?.[0];
-
-  const ButtonGroup = h(
-    'div',
-    { id: linkId, class: 'BtnGroup flex-self-start ml-auto' },
-    // Main link to an existing issue or to create a new issue on Linear.
-    h(
-      'a',
-      {
-        href: linearIssue ? linearIssue.url : newIssueUrl,
-        class: 'BtnGroup-item rounded-left-2 btn btn-sm',
-      },
-      h(
-        'span',
-        { class: 'gh2l-icon-text-lockup' },
-        LinearLogo(),
-        linearIssue ? linearIssue.identifier : 'Add to Linear'
-      )
-    ),
-    // If there’s an existing issue, also show a smaller “+” button to for making new issues.
-    linearIssue
-      ? h(
-          'a',
-          {
-            class: 'BtnGroup-item btn btn-sm',
-            title: 'Create new Linear issue',
-            href: newIssueUrl,
-          },
-          PlusIcon()
-        )
-      : ''
-  );
-
-  // Inject the link into the page.
-  headerMeta.append(ButtonGroup);
-  injectSidebarUI(issues);
 }
 
 /**

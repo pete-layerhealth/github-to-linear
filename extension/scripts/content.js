@@ -177,10 +177,9 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
     }
     
     const [, owner, repo] = repoMatch;
-    const prUrl = `https://github.com/${owner}/${repo}/pull/`;
 
     // Create Linear ticket
-    const linearTicket = await createLinearTicket(prTitle, prDescription, prUrl);
+    const linearTicket = await createLinearTicket(prTitle, prDescription);
 
     // Add Linear ticket reference to PR description
     const ticketReference = `\n\ncloses ${linearTicket.identifier} - ${linearTicket.title}\n${linearTicket.url}`;
@@ -210,10 +209,9 @@ async function handleCreatePrWithTicket(prForm, originalButton) {
  * Create a Linear ticket via the API.
  * @param {string} title The title for the Linear ticket
  * @param {string} description The description for the Linear ticket
- * @param {string} prUrl The URL that will be added to the Linear ticket
  * @returns {Promise<{identifier: string, title: string, url: string} | null>}
  */
-async function createLinearTicket(title, description, prUrl) {
+async function createLinearTicket(title, description) {
   // Get user preferences for default team and assignee
   const defaults = await new Promise((resolve) => {
     chrome.storage.local.get({ defaults: {} }, ({ defaults }) => {
@@ -231,7 +229,7 @@ async function createLinearTicket(title, description, prUrl) {
   
   // Ensure description is not too long
   const prDescription = description.trim();
-  const fullDescription = `${prDescription}\n\nGitHub PR: ${prUrl}`;
+  const fullDescription = `${prDescription}\n`;
   const truncatedDescription = fullDescription.length > 50000 ? fullDescription.substring(0, 49997) + '...' : fullDescription;
 
   let createIssueQuery;
